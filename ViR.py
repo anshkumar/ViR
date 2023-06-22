@@ -2,9 +2,6 @@ import os, math, gc, importlib
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-import pytorch_lightning as pl
-from pytorch_lightning.utilities import rank_zero_info, rank_zero_only
-from pytorch_lightning.strategies import DeepSpeedStrategy
 import deepspeed
 from collections import OrderedDict
 from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
@@ -132,13 +129,6 @@ class RWKV_TimeMix(nn.Module):
         # Init
         for l in [self.key, self.receptance, self.output]:
             nn.init.zeros_(l.weight)
-            nn.init.zeros_(l.bias)
-        gain = 1.0
-        scale = 1.0
-        shape = self.value.shape
-        if shape[0] > shape[1]:
-            gain = math.sqrt(shape[0] / shape[1])
-        nn.init.orthogonal_(self.value, gain=gain * scale)
 
     def jit_func(self, x):
         xx = self.time_shift(x) # Mix x with the previous timestep to produce xk, xv, xr
@@ -187,13 +177,6 @@ class RWKV_ChannelMix(nn.Module):
         # Init
         for l in [self.value, self.receptance]:
             nn.init.zeros_(l.weight)
-            nn.init.zeros_(l.bias)
-        gain = 1.0
-        scale = 1.0
-        shape = self.key.shape
-        if shape[0] > shape[1]:
-            gain = math.sqrt(shape[0] / shape[1])
-        nn.init.orthogonal_(self.key, gain=gain * scale)
 
     def forward(self, input: torch.Tensor):
         input_ts = self.time_shift(input)

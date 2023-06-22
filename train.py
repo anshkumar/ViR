@@ -50,7 +50,7 @@ def main(argv):
             labels = labels.to(device)
 
             # Forward pass
-            outputs = model(images)
+            outputs = model(images, include_head=True)
             loss = criterion(outputs, labels)
 
             # Backward and optimize

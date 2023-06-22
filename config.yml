@@ -1,5 +1,5 @@
-image_size: 224
-patch_size: 16
+image_size: 32
+patch_size: 2
 num_classes: 10
 num_epochs: 10
 batch_size: 128
