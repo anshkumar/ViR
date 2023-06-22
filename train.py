@@ -46,7 +46,7 @@ def main(argv):
         lr=float(config["learning_rate"]), 
         betas=(float(config["beta_1"]), float(config["beta_2"])), 
         eps=float(config["adam_eps"]), 
-        weight_decay=0, 
+        weight_decay=float(config["weight_decay"]), 
         amsgrad=False,
         fused=True)
 
@@ -77,7 +77,7 @@ def main(argv):
         for images, labels in test_loader:
             images = images.to(device)
             labels = labels.to(device)
-            outputs = model(images)
+            outputs = model(images, include_head=True)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
