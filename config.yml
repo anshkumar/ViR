@@ -1,0 +1,15 @@
+image_size: 224
+patch_size: 16
+num_classes: 10
+num_epochs: 10
+batch_size: 128
+learning_rate: 0.001
+n_embd: 768
+dim_att: 768 # dim_att = n_embd
+dim_ffn: 3072 # n_embd * 4
+n_layer: 6
+layerwise_lr: 1
+lr_init: 6e-4
+beta_1: 0.9
+beta_2: 0.99
+adam_eps: 1e-8
