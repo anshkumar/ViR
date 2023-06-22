@@ -42,7 +42,11 @@ def main(argv):
 
     # Define loss function and optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = FusedAdam(model.parameters(), 
+    optim_groups = [
+                {"params": [p for n, p in model.named_parameters()], "weight_decay": 0.0},
+            ]
+
+    optimizer = FusedAdam(optim_groups, 
                           lr=config["learning_rate"], 
                           betas=(config["beta_1"], config["beta_2"]), 
                           eps=config["adam_eps"], 
