@@ -6,8 +6,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-import deepspeed
-from deepspeed.ops.adam import FusedAdam
 import yaml
 from IPython import embed
 
@@ -43,23 +41,14 @@ def main(argv):
     # Define loss function and optimizer
     criterion = nn.CrossEntropyLoss()
 
-    # Configure Deepspeed
-    parameters = filter(lambda p: p.requires_grad, model.parameters())
-    model_engine, optimizer, _, _ = deepspeed.initialize(
-        None,
-        model,
-        model_parameters=parameters,
-        config=config,
-        optimizer=None
-        )
-    optimizer = FusedAdam(model.parameters(), 
-                          lr=config["learning_rate"], 
-                          betas=(config["beta_1"], config["beta_2"]), 
-                          eps=config["adam_eps"], 
-                          bias_correction=True, 
-                          adam_w_mode=False, 
-                          weight_decay=0, 
-                          amsgrad=False)
+    optimizer = optim.Adam(
+        model.parameters(), 
+        lr=float(config["learning_rate"]), 
+        betas=(float(config["beta_1"]), float(config["beta_2"])), 
+        eps=float(config["adam_eps"]), 
+        weight_decay=0, 
+        amsgrad=False,
+        fused=True)
 
     # Training loop
     total_steps = len(train_loader)
@@ -73,8 +62,9 @@ def main(argv):
             loss = criterion(outputs, labels)
 
             # Backward and optimize
-            model_engine.backward(loss)
-            model_engine.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
             if (i+1) % 100 == 0:
                 print(f"Epoch [{epoch+1}/{config['num_epochs']}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}")
