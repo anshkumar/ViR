@@ -42,11 +42,17 @@ def main(argv):
 
     # Define loss function and optimizer
     criterion = nn.CrossEntropyLoss()
-    optim_groups = [
-                {"params": [p for n, p in model.named_parameters()], "weight_decay": 0.0},
-            ]
 
-    optimizer = FusedAdam(optim_groups, 
+    # Configure Deepspeed
+    parameters = filter(lambda p: p.requires_grad, model.parameters())
+    model_engine, optimizer, _, _ = deepspeed.initialize(
+        None,
+        model,
+        model_parameters=parameters,
+        config=config,
+        optimizer=None
+        )
+    optimizer = FusedAdam(model.parameters(), 
                           lr=config["learning_rate"], 
                           betas=(config["beta_1"], config["beta_2"]), 
                           eps=config["adam_eps"], 
@@ -67,9 +73,8 @@ def main(argv):
             loss = criterion(outputs, labels)
 
             # Backward and optimize
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            model_engine.backward(loss)
+            model_engine.step()
 
             if (i+1) % 100 == 0:
                 print(f"Epoch [{epoch+1}/{config['num_epochs']}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}")
