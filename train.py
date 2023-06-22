@@ -6,6 +6,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
+import deepspeed
+from deepspeed.ops.adam import FusedAdam
 import yaml
 from IPython import embed
 
@@ -40,7 +42,14 @@ def main(argv):
 
     # Define loss function and optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=config["learning_rate"])
+    optimizer = FusedAdam(model.parameters(), 
+                          lr=config["learning_rate"], 
+                          betas=config["betas"], 
+                          eps=config["adam_eps"], 
+                          bias_correction=True, 
+                          adam_w_mode=False, 
+                          weight_decay=0, 
+                          amsgrad=False)
 
     # Training loop
     total_steps = len(train_loader)

@@ -8,8 +8,5 @@ n_embd: 768
 dim_att: 768 # dim_att = n_embd
 dim_ffn: 3072 # n_embd * 4
 n_layer: 6
-layerwise_lr: 1
-lr_init: 6e-4
-beta_1: 0.9
-beta_2: 0.99
+betas: (0.9, 0.999)
 adam_eps: 1e-8
