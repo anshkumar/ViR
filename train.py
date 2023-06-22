@@ -44,7 +44,7 @@ def main(argv):
     criterion = nn.CrossEntropyLoss()
     optimizer = FusedAdam(model.parameters(), 
                           lr=config["learning_rate"], 
-                          betas=config["betas"], 
+                          betas=(config["beta_1"], config["beta_2"]), 
                           eps=config["adam_eps"], 
                           bias_correction=True, 
                           adam_w_mode=False, 
