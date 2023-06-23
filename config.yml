@@ -3,7 +3,7 @@ patch_size: 16
 num_classes: 10
 num_epochs: 10
 batch_size: 256
-learning_rate: 0.01
+learning_rate: 0.001
 n_embd: 768
 dim_att: 768 # dim_att = n_embd
 dim_ffn: 3072 # n_embd * 4
