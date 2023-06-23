@@ -1,13 +1,10 @@
-import os, math, gc, importlib
+import math
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
-import deepspeed
 from collections import OrderedDict
-from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
 from typing import Callable
 from functools import partial
-from typing import Dict, Union
+from typing import Dict
 
 T_MAX = 1024
 RWKV_FLOAT_MODE = "fp32"
