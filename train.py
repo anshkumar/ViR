@@ -36,7 +36,7 @@ def main(argv):
 
     # Initialize the model
     model = VisionRWKV(config, config["image_size"], config["patch_size"], config["n_embd"], config["num_classes"]).to(device)
-    model = torch.jit.script(model)
+    # model = torch.jit.script(model)
 
     # Define loss function and optimizer
     criterion = nn.CrossEntropyLoss()
