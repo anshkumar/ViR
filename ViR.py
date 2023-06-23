@@ -191,22 +191,26 @@ class Block(nn.Module):
             layer_id: int):
         super().__init__()
 
-        ln1 = nn.LayerNorm(config["n_embd"])
-        ln2 = nn.LayerNorm(config["n_embd"])
+        self.layer_id = layer_id
+        self.ln1 = nn.LayerNorm(config["n_embd"])
+        self.ln2 = nn.LayerNorm(config["n_embd"])
 
-        att = RWKV_TimeMix(config, layer_id)
-        ffn = RWKV_ChannelMix(config, layer_id)
+        self.att = RWKV_TimeMix(config, layer_id)
+        self.ffn = RWKV_ChannelMix(config, layer_id)
 
         if layer_id == 0:
-            ln0 = nn.LayerNorm(config["n_embd"])
-            self.layers_1 = nn.Sequential(ln0, ln1, att)
-        else:
-            self.layers_1 = nn.Sequential(ln1, att)
-        self.layers_2 = nn.Sequential(ln2, ffn)
+            self.ln0 = nn.LayerNorm(config["n_embd"])
+            self.pos_emb_x = nn.Parameter(torch.zeros((1, config["image_size"]//config["patch_size"], config["n_embd"])))
+            self.pos_emb_y = nn.Parameter(torch.zeros((config["image_size"]//config["patch_size"], 1, config["n_embd"])))
 
     def forward(self, input: torch.Tensor):
-        input = input + self.layers_1(input)
-        input = input + self.layers_2(input)
+        B, T, C = input.size()
+        if self.layer_id == 0:
+            input = self.ln0(input)
+            pos_emb = (self.pos_emb_x + self.pos_emb_y).reshape(T-1, -1)
+            input = input[:, 1:] + pos_emb
+        input = input + self.att(self.ln1(input))
+        input = input + self.ffn(self.ln2(input))
 
         return input
 
