@@ -191,27 +191,22 @@ class Block(nn.Module):
             layer_id: int):
         super().__init__()
 
-        self.layer_id = layer_id
-        self.ln1 = nn.LayerNorm(config["n_embd"])
-        self.ln2 = nn.LayerNorm(config["n_embd"])
+        ln0 = nn.LayerNorm(config["n_embd"])
+        ln1 = nn.LayerNorm(config["n_embd"])
+        ln2 = nn.LayerNorm(config["n_embd"])
 
-        self.att = RWKV_TimeMix(config, layer_id)
-        self.ffn = RWKV_ChannelMix(config, layer_id)
+        att = RWKV_TimeMix(config, layer_id)
+        ffn = RWKV_ChannelMix(config, layer_id)
 
         if layer_id == 0:
-            self.ln0 = nn.LayerNorm(config["n_embd"])
-            self.pos_emb_x = nn.Parameter(torch.zeros((1, config["image_size"]//config["patch_size"], config["n_embd"])))
-            self.pos_emb_y = nn.Parameter(torch.zeros((config["image_size"]//config["patch_size"], 1, config["n_embd"])))
-
+            self.layers_1 = nn.Sequential([ln0, ln1, att])
+        else:
+            self.layers_1 = nn.Sequential([ln1, att])
+        self.layers_2 = nn.Sequential([ln2, ffn])
+            
     def forward(self, input: torch.Tensor):
-        B, T, C = input.size()
-        if self.layer_id == 0:
-            input = self.ln0(input)
-            pos_emb = (self.pos_emb_x + self.pos_emb_y).reshape(T-1, -1)
-            input = input[:, 1:] + pos_emb
-        input = input + self.att(self.ln1(input))
-        input = input + self.ffn(self.ln2(input))
-
+        input = input + self.layers_1(input)
+        input = input + self.layers_2(input)
         return input
 
 class Encoder(nn.Module):
@@ -220,25 +215,26 @@ class Encoder(nn.Module):
     def __init__(
         self,
         config: Dict[str, float],
-        seq_length: int,
-        hidden_dim: int,
-        dropout: float,
         norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
     ):
         super().__init__()
         # Note that batch_size is on the first dim because
         # we have batch_first=True in nn.MultiAttention() by default
-        self.pos_embedding = nn.Parameter(torch.empty(1, seq_length, hidden_dim).normal_(std=0.02))  # from BERT
-        self.dropout = nn.Dropout(dropout)
+        self.pos_emb_x = nn.Parameter(torch.zeros((1, config["image_size"]//config["patch_size"], config["n_embd"])))
+        self.pos_emb_y = nn.Parameter(torch.zeros((config["image_size"]//config["patch_size"], 1, config["n_embd"])))
+
+        self.dropout = nn.Dropout(config["dropout"])
         layers: OrderedDict[str, nn.Module] = OrderedDict()
         for i in range(config["n_layer"]):
             layers[f"encoder_layer_{i}"] = Block(config, i)
         self.layers = nn.Sequential(layers)
-        self.ln = norm_layer(hidden_dim)
+        self.ln = norm_layer(config["n_embd"])
 
     def forward(self, input: torch.Tensor):
+        B, T, C = input.size()
         torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
-        input = input + self.pos_embedding
+        pos_emb = (self.pos_emb_x + self.pos_emb_y).reshape(T-1, -1)
+        input = input[:, 1:] + pos_emb
         return self.ln(self.layers(self.dropout(input)))
 
 class VisionRWKV(nn.Module):
@@ -260,14 +256,11 @@ class VisionRWKV(nn.Module):
             in_channels=3, out_channels=hidden_dim, kernel_size=patch_size, stride=patch_size
         )
 
-        seq_length = (image_size // patch_size) ** 2
 
         # Add a class token
         self.class_token = nn.Parameter(torch.zeros(1, 1, hidden_dim))
-        seq_length += 1
 
-        self.seq_length = seq_length
-        self.encoder = Encoder(config, self.seq_length, config["n_embd"], config["dropout"])
+        self.encoder = Encoder(config)
 
         self.heads = nn.Linear(hidden_dim, num_classes)
 
