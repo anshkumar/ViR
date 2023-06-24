@@ -29,10 +29,13 @@ def main(argv):
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
 
-    train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    if config["dataset"] == 'cifar10':
+        train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+        test_dataset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    elif config["dataset"] == 'imagenet1k':
+        train_dataset = torchvision.datasets.ImageNet(root='./data', split='train', download=True, transform=transform)
+        test_dataset = torchvision.datasets.ImageNet(root='./data', split='val', download=True, transform=transform)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
-
-    test_dataset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config["batch_size"], shuffle=False)
 
     # Initialize the model
