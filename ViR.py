@@ -285,10 +285,18 @@ class VisionRWKV(nn.Module):
         self.heads = nn.Linear(hidden_dim, num_classes)
 
         # Init
-        fan_in = self.conv_proj.in_channels * self.conv_proj.kernel_size[0] * self.conv_proj.kernel_size[1]
-        nn.init.trunc_normal_(self.conv_proj.weight, std=math.sqrt(1 / fan_in))
-        if self.conv_proj.bias is not None:
-            nn.init.zeros_(self.conv_proj.bias)
+        if isinstance(self.conv_proj, nn.Conv2d):
+            fan_in = self.conv_proj.in_channels * self.conv_proj.kernel_size[0] * self.conv_proj.kernel_size[1]
+            nn.init.trunc_normal_(self.conv_proj.weight, std=math.sqrt(1 / fan_in))
+            if self.conv_proj.bias is not None:
+                nn.init.zeros_(self.conv_proj.bias)
+        elif self.conv_proj.conv_last is not None and isinstance(self.conv_proj.conv_last, nn.Conv2d):
+            # Init the last 1x1 conv of the conv stem
+            nn.init.normal_(
+                self.conv_proj.conv_last.weight, mean=0.0, std=math.sqrt(2.0 / self.conv_proj.conv_last.out_channels)
+            )
+            if self.conv_proj.conv_last.bias is not None:
+                nn.init.zeros_(self.conv_proj.conv_last.bias)
 
         nn.init.zeros_(self.heads.weight)
         nn.init.zeros_(self.heads.bias)
