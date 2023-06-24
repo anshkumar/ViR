@@ -191,7 +191,6 @@ class Block(nn.Module):
             layer_id: int):
         super().__init__()
 
-        ln0 = nn.LayerNorm(config["n_embd"])
         ln1 = nn.LayerNorm(config["n_embd"])
         ln2 = nn.LayerNorm(config["n_embd"])
 
@@ -199,11 +198,12 @@ class Block(nn.Module):
         ffn = RWKV_ChannelMix(config, layer_id)
 
         if layer_id == 0:
-            self.layers_1 = nn.Sequential([ln0, ln1, att])
+            ln0 = nn.LayerNorm(config["n_embd"])
+            self.layers_1 = nn.Sequential(ln0, ln1, att)
         else:
-            self.layers_1 = nn.Sequential([ln1, att])
-        self.layers_2 = nn.Sequential([ln2, ffn])
-            
+            self.layers_1 = nn.Sequential(ln1, att)
+        self.layers_2 = nn.Sequential(ln2, ffn)
+
     def forward(self, input: torch.Tensor):
         input = input + self.layers_1(input)
         input = input + self.layers_2(input)
