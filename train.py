@@ -68,7 +68,7 @@ def main(argv):
             loss.backward()
             optimizer.step()
 
-            if (i+1) % 100 == 0:
+            if (i+1) % config["print_step"] == 0:
                 print(f"Epoch [{epoch+1}/{config['num_epochs']}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}")
         scheduler.step()
 

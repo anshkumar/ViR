@@ -2,7 +2,7 @@ image_size: 32
 patch_size: 16
 num_classes: 10
 num_epochs: 10
-batch_size: 256
+batch_size: 512
 learning_rate: 0.03
 n_embd: 768
 dim_att: 768 # dim_att = n_embd
@@ -13,3 +13,4 @@ beta_2: 0.999
 adam_eps: 1e-8
 weight_decay: 0.0004
 dropout: 0.1
+print_step: 50

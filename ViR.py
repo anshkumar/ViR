@@ -7,7 +7,7 @@ from functools import partial
 from typing import Dict
 
 T_MAX = 1024
-RWKV_FLOAT_MODE = "fp32"
+RWKV_FLOAT_MODE = "bf16"
 ACCELERATOR = "gpu"
 
 from torch.utils.cpp_extension import load
@@ -27,9 +27,9 @@ class WKV(torch.autograd.Function):
         assert B * C % min(C, 32) == 0
         if RWKV_FLOAT_MODE == "bf16":
             w = -torch.exp(w.float().contiguous())
-            u = u.contiguous()
-            k = k.contiguous()
-            v = v.contiguous()
+            u = u.bfloat16().contiguous()
+            k = k.bfloat16().contiguous()
+            v = v.bfloat16().contiguous()
             y = torch.empty((B, T, C), device=w.device, memory_format=torch.contiguous_format, dtype=torch.bfloat16)
         elif "32" in RWKV_FLOAT_MODE:
             w = -torch.exp(w.contiguous())
