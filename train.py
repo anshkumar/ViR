@@ -42,12 +42,21 @@ def main(argv):
     # Define loss function and optimizer
     criterion = nn.CrossEntropyLoss()
 
+    parameters_with_decay = []
+    parameters_without_decay = []
+
+    for name, parameter in model.named_parameters():
+        if 'weight' in name:
+            parameters_with_decay.append(parameter)
+        else:
+            parameters_without_decay.append(parameter)
+
     optimizer = optim.Adam(
-        model.parameters(), 
+        [{'params': parameters_with_decay, 'weight_decay': float(config["weight_decay"])},
+        {'params': parameters_without_decay, 'weight_decay': 0.0}], 
         lr=float(config["learning_rate"]), 
         betas=(float(config["beta_1"]), float(config["beta_2"])), 
         eps=float(config["adam_eps"]), 
-        weight_decay=float(config["weight_decay"]), 
         amsgrad=False,
         fused=True)
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["num_epochs"])
