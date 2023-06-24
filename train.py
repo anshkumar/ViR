@@ -1,4 +1,4 @@
-from ViR import VisionRWKV
+from ViR import VisionRWKV, ConvStemConfig
 from absl import app
 from absl import flags
 import torch
@@ -36,7 +36,21 @@ def main(argv):
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config["batch_size"], shuffle=False)
 
     # Initialize the model
-    model = VisionRWKV(config, config["image_size"], config["patch_size"], config["n_embd"], config["num_classes"]).to(device)
+    conv_stem_configs = [
+        ConvStemConfig(out_channels=48, kernel_size=3, stride=2),
+        ConvStemConfig(out_channels=96, kernel_size=3, stride=2),
+        ConvStemConfig(out_channels=192, kernel_size=3, stride=2),
+        ConvStemConfig(out_channels=384, kernel_size=3, stride=2),
+        ConvStemConfig(out_channels=384, kernel_size=1, stride=1),
+    ]
+
+    model = VisionRWKV(
+        config, 
+        config["image_size"], 
+        config["patch_size"], 
+        config["n_embd"], 
+        config["num_classes"],
+        conv_stem_configs).to(device)
     model = torch.jit.script(model)
 
     # Define loss function and optimizer
