@@ -267,7 +267,7 @@ class VisionRWKV(nn.Module):
         seq_length += 1
 
         self.seq_length = seq_length
-        self.encoder = Encoder(config, self.seq_length, config["n_embd"], 0.0)
+        self.encoder = Encoder(config, self.seq_length, config["n_embd"], config["dropout"])
 
         self.heads = nn.Linear(hidden_dim, num_classes)
 

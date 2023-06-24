@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
+import torch.optim.lr_scheduler as lr_scheduler
 import yaml
 from IPython import embed
 
@@ -49,6 +50,7 @@ def main(argv):
         weight_decay=float(config["weight_decay"]), 
         amsgrad=False,
         fused=True)
+    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["num_epochs"])
 
     # Training loop
     total_steps = len(train_loader)
@@ -68,6 +70,7 @@ def main(argv):
 
             if (i+1) % 100 == 0:
                 print(f"Epoch [{epoch+1}/{config['num_epochs']}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}")
+        scheduler.step()
 
     # Test the model
     model.eval()
