@@ -220,9 +220,7 @@ class Encoder(nn.Module):
         super().__init__()
         # Note that batch_size is on the first dim because
         # we have batch_first=True in nn.MultiAttention() by default
-        self.pos_emb_x = nn.Parameter(torch.zeros((1, config["image_size"]//config["patch_size"], config["n_embd"])))
-        self.pos_emb_y = nn.Parameter(torch.zeros((config["image_size"]//config["patch_size"], 1, config["n_embd"])))
-
+        self.pos_emb = nn.Parameter(torch.empty(((config["image_size"]//config["patch_size"])**2, config["n_embd"])).normal_(std=0.02))
         self.dropout = nn.Dropout(config["dropout"])
         layers: OrderedDict[str, nn.Module] = OrderedDict()
         for i in range(config["n_layer"]):
@@ -231,10 +229,8 @@ class Encoder(nn.Module):
         self.ln = norm_layer(config["n_embd"])
 
     def forward(self, input: torch.Tensor):
-        B, T, C = input.size()
         torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
-        pos_emb = (self.pos_emb_x + self.pos_emb_y).reshape(T-1, -1)
-        input = input[:, 1:] + pos_emb
+        input = input[:, 1:] + self.pos_emb
         return self.ln(self.layers(self.dropout(input)))
 
 class VisionRWKV(nn.Module):
