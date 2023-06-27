@@ -8,6 +8,8 @@ import torchvision
 import torchvision.transforms as transforms
 import torch.optim.lr_scheduler as lr_scheduler
 import yaml
+import os
+import glob
 from IPython import embed
 
 FLAGS = flags.FLAGS
@@ -18,23 +20,34 @@ def main(argv):
     # Load the YAML file
     with open(FLAGS.config, 'r') as f:
         config = yaml.safe_load(f)
-        
+
+    top_k = 5
+    os.makedirs(config["ckpt_path"], exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load and preprocess dataset
-    transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomCrop(32, padding=4),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-    ])
+    if config["dataset"] == 'imagenet1k':
+        transform = transforms.Compose([
+            transforms.Resize(256),                    # Resize the image to 256x256 pixels
+            transforms.CenterCrop(224),                # Crop the center 224x224 pixels
+            transforms.RandomHorizontalFlip(),         # Randomly flip the image horizontally
+            transforms.ToTensor(),                      # Convert the image to a tensor
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize the image
+            ])
+    if config["dataset"] == 'cifar10':
+        transform = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop(32, padding=4),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        ])
 
     if config["dataset"] == 'cifar10':
-        train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-        test_dataset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+        train_dataset = torchvision.datasets.CIFAR10(root='./data_cifar10', train=True, download=True, transform=transform)
+        test_dataset = torchvision.datasets.CIFAR10(root='./data_cifar10', train=False, download=True, transform=transform)
     elif config["dataset"] == 'imagenet1k':
-        train_dataset = torchvision.datasets.ImageNet(root='./data', split='train', download=True, transform=transform)
-        test_dataset = torchvision.datasets.ImageNet(root='./data', split='val', download=True, transform=transform)
+        train_dataset = torchvision.datasets.ImageNet(root='./data_imagenet1k', split='train', transform=transform)
+        test_dataset = torchvision.datasets.ImageNet(root='./data_imagenet1k', split='val', transform=transform)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config["batch_size"], shuffle=False)
 
@@ -68,7 +81,7 @@ def main(argv):
         else:
             parameters_without_decay.append(parameter)
 
-    optimizer = optim.Adam(
+    optimizer = optim.AdamW(
         [{'params': parameters_with_decay, 'weight_decay': float(config["weight_decay"])},
         {'params': parameters_without_decay, 'weight_decay': 0.0}], 
         lr=float(config["learning_rate"]), 
@@ -92,11 +105,22 @@ def main(argv):
             # Backward and optimize
             optimizer.zero_grad()
             loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), config["max_norm"])
             optimizer.step()
 
             if (i+1) % config["print_step"] == 0:
                 print(f"Epoch [{epoch+1}/{config['num_epochs']}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}")
-        scheduler.step()
+            scheduler.step()
+        # Save the model after each epoch
+        checkpoint_path = os.path.join(config["ckpt_path"], f"model_epoch_{epoch+1}.pt")
+        torch.save(model.state_dict(), checkpoint_path)
+
+        # Remove older checkpoints, keeping only top_k checkpoints
+        checkpoints = glob.glob(os.path.join(config["ckpt_path"], "model_epoch_*.pt"))
+        checkpoints.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))  # Sort by epoch number
+        checkpoints_to_delete = checkpoints[:-top_k]
+        for checkpoint in checkpoints_to_delete:
+            os.remove(checkpoint)
 
     # Test the model
     model.eval()
