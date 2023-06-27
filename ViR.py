@@ -95,28 +95,11 @@ class RWKV_TimeMix(nn.Module):
         self.n_embd = config["n_embd"]
         self.dim_att = config["dim_att"]
 
-        with torch.no_grad():  # fancy init
-            ratio_0_to_1 = layer_id / (config["n_layer"] - 1)  # 0 to 1
-            ratio_1_to_almost0 = 1.0 - (layer_id / config["n_layer"])  # 1 to ~0
-            ddd = torch.ones(1, 1, config["n_embd"])
-            for i in range(config["n_embd"]):
-                ddd[0, 0, i] = i / config["n_embd"]
-            
-            # fancy time_decay
-            decay_speed = torch.ones(config["dim_att"])
-            for h in range(config["dim_att"]):
-                decay_speed[h] = -5 + 8 * (h / (config["dim_att"] - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
-            self.time_decay = nn.Parameter(decay_speed)
-            # print(layer_id, self.time_decay.flatten()[:3].cpu().numpy(), '...', self.time_decay.flatten()[-3:].cpu().numpy())
-
-            # fancy time_first
-            zigzag = torch.tensor([(i + 1) % 3 - 1 for i in range(config["dim_att"])]) * 0.5
-            self.time_first = nn.Parameter(torch.ones(config["dim_att"]) * math.log(0.3) + zigzag)
-
-            # fancy time_mix
-            self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
-            self.time_mix_v = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
-            self.time_mix_r = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
+        self.time_decay = nn.Parameter(torch.empty(config["dim_att"]))
+        self.time_first = nn.Parameter(torch.empty(config["dim_att"]))
+        self.time_mix_k = nn.Parameter(torch.empty(1, 1, config["n_embd"]))
+        self.time_mix_v = nn.Parameter(torch.empty(1, 1, config["n_embd"]))
+        self.time_mix_r = nn.Parameter(torch.empty(1, 1, config["n_embd"]))
 
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
         self.key = nn.Linear(config["n_embd"], config["dim_att"], bias=False)
@@ -127,6 +110,11 @@ class RWKV_TimeMix(nn.Module):
         # Init
         for l in [self.key, self.receptance, self.output]:
             nn.init.zeros_(l.weight)
+        nn.init.normal_(self.time_decay)
+        nn.init.normal_(self.time_first)
+        nn.init.normal_(self.time_mix_k)
+        nn.init.normal_(self.time_mix_v)
+        nn.init.normal_(self.time_mix_r)
 
     def jit_func(self, x):
         xx = self.time_shift(x) # Mix x with the previous timestep to produce xk, xv, xr
@@ -160,14 +148,8 @@ class RWKV_ChannelMix(nn.Module):
         super().__init__()
         self.layer_id = layer_id
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
-
-        with torch.no_grad():  # fancy init of time_mix
-            ratio_1_to_almost0 = 1.0 - (layer_id / config["n_layer"])  # 1 to ~0
-            ddd = torch.ones(1, 1, config["n_embd"])
-            for i in range(config["n_embd"]):
-                ddd[0, 0, i] = i / config["n_embd"]
-            self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
-            self.time_mix_r = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
+        self.time_mix_k = nn.Parameter(torch.empty(1, 1, config["n_embd"]))
+        self.time_mix_r = nn.Parameter(torch.empty(1, 1, config["n_embd"]))
         self.key = nn.Linear(config["n_embd"], config["dim_ffn"], bias=False)
         self.receptance = nn.Linear(config["n_embd"], config["n_embd"], bias=False)
         self.value = nn.Linear(config["dim_ffn"], config["n_embd"], bias=False)
@@ -175,6 +157,8 @@ class RWKV_ChannelMix(nn.Module):
         # Init
         for l in [self.value, self.receptance]:
             nn.init.zeros_(l.weight)
+        nn.init.normal_(self.time_mix_k)
+        nn.init.normal_(self.time_mix_r)
 
     def forward(self, input: torch.Tensor):
         input_ts = self.time_shift(input)
