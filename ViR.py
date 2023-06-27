@@ -108,9 +108,9 @@ class RWKV_TimeMix(nn.Module):
         self.output = nn.Linear(config["dim_att"], config["n_embd"], bias=False)
 
         # Init
-        # for l in [self.key, self.receptance, self.output]:
-        #     nn.init.zeros_(l.weight)
-        for l in [self.key, self.receptance, self.output, self.value, self.time_decay, self.time_first, self.time_mix_k, self.time_mix_v, self.time_mix_r]:
+        for l in [self.key, self.receptance, self.output]:
+            nn.init.zeros_(l.weight)
+        for l in [self.value, self.time_decay, self.time_first, self.time_mix_k, self.time_mix_v, self.time_mix_r]:
             nn.init.normal_(l, std=0.02)
 
     def jit_func(self, x):
@@ -152,9 +152,9 @@ class RWKV_ChannelMix(nn.Module):
         self.value = nn.Linear(config["dim_ffn"], config["n_embd"], bias=False)
 
         # Init
-        # for l in [self.value, self.receptance]:
-        #     nn.init.zeros_(l.weight)
-        for l in [self.value, self.receptance, self.key, self.time_mix_k, self.time_mix_r]:
+        for l in [self.value, self.receptance]:
+            nn.init.zeros_(l.weight)
+        for l in [self.key, self.time_mix_k, self.time_mix_r]:
             nn.init.normal_(l, std=0.02)
 
     def forward(self, input: torch.Tensor):
