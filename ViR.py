@@ -261,7 +261,7 @@ class Encoder(nn.Module):
         self.dropout = nn.Dropout(config["dropout"])
         layers: OrderedDict[str, nn.Module] = OrderedDict()
         for i in range(config["n_layer"]):
-            layers[f"encoder_layer_{i}"] = Block(config, i)
+            layers[f"encoder_layer_{i}"] = Block(config)
         self.layers = nn.Sequential(layers)
         self.ln = norm_layer(config["n_embd"])
 
