@@ -233,17 +233,18 @@ class Block(nn.Module):
 
         self.dropout = nn.Dropout(config["dropout"])
 
-        # MLP block
-        self.ln2 = norm_layer(config["n_embd"])
-        self.mlp = MLPBlock(config["n_embd"], config["dim_ffn"], config["dropout"])
+        # # MLP block
+        # self.ln2 = norm_layer(config["n_embd"])
+        # self.mlp = MLPBlock(config["n_embd"], config["dim_ffn"], config["dropout"])
 
     def forward(self, input: torch.Tensor):
         x = input + self.dropout(self.layers(self.ln1(input)))
 
-        y = self.ln_2(x)
-        y = self.mlp(y)
+        # y = self.ln_2(x)
+        # y = self.mlp(y)
 
-        return x + y
+        # return x + y
+        return x
 
 class Encoder(nn.Module):
     """Model Encoder for sequence to sequence translation."""
