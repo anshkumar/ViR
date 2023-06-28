@@ -1,4 +1,5 @@
 from ViR import VisionRWKV, ConvStemConfig
+from ViT import VisionTransformer
 from absl import app
 from absl import flags
 import torch
@@ -60,13 +61,22 @@ def main(argv):
         ConvStemConfig(out_channels=384, kernel_size=1, stride=1),
     ]
 
-    model = VisionRWKV(
-        config, 
-        config["image_size"], 
-        config["patch_size"], 
-        config["n_embd"], 
-        config["num_classes"],
-        conv_stem_configs).to(device)
+    if config["backbone"].lower() == 'vir':
+        model = VisionRWKV(
+            config, 
+            config["image_size"], 
+            config["patch_size"], 
+            config["n_embd"], 
+            config["num_classes"],
+            conv_stem_configs).to(device)
+    else:
+        model = VisionTransformer(
+            config, 
+            config["image_size"], 
+            config["patch_size"], 
+            config["n_embd"], 
+            config["num_classes"],
+            conv_stem_configs).to(device)
     model = torch.jit.script(model)
 
     # Define loss function and optimizer

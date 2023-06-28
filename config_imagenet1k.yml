@@ -1,4 +1,5 @@
 dataset: imagenet1k
+backbone: vit
 ckpt_path: '/home/sort/ved/ViR/ckpt/'
 image_size: 224
 patch_size: 16
@@ -6,7 +7,6 @@ max_norm: 1
 num_classes: 1000
 num_epochs: 400
 batch_size: 128
-warmup_epochs: 1
 learning_rate: 0.0001
 n_embd: 768
 dim_att: 768 # dim_att = n_embd
