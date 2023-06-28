@@ -224,26 +224,26 @@ class Block(nn.Module):
         ):
         super().__init__()
 
-        self.ln1 = nn.LayerNorm(config["n_embd"])
-        self.ln2 = nn.LayerNorm(config["n_embd"])
+        self.ln1 = norm_layer(config["n_embd"])
 
-        self.att = RWKV_TimeMix(config)
-        self.ffn = RWKV_ChannelMix(config)
+        self.layers = nn.Sequential()
+        for i in range(config["num_heads"]):
+            self.layers.add_module(f"RWKV_TimeMix_{i}", RWKV_TimeMix(config))
+            self.layers.add_module(f"RWKV_ChannelMix_{i}", RWKV_ChannelMix(config))
 
         self.dropout = nn.Dropout(config["dropout"])
 
         # MLP block
-        self.ln_2 = norm_layer(config["n_embd"])
+        self.ln2 = norm_layer(config["n_embd"])
         self.mlp = MLPBlock(config["n_embd"], config["dim_ffn"], config["dropout"])
 
     def forward(self, input: torch.Tensor):
-        input = input + self.dropout(self.att(self.ln1(input)))
-        input = input + self.dropout(self.ffn(self.ln2(input)))
+        x = input + self.dropout(self.layers(self.ln1(input)))
 
-        y = self.ln_2(input)
+        y = self.ln_2(x)
         y = self.mlp(y)
 
-        return input + y
+        return x + y
 
 class Encoder(nn.Module):
     """Model Encoder for sequence to sequence translation."""

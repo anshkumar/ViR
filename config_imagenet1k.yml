@@ -12,6 +12,7 @@ n_embd: 768
 dim_att: 768 # dim_att = n_embd
 dim_ffn: 3072 # n_embd * 4
 n_layer: 12
+num_heads: 12
 beta_1: 0.9
 beta_2: 0.999
 adam_eps: 1e-12
