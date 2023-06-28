@@ -1,5 +1,5 @@
 dataset: cifar10
-backbone: vit
+backbone: vir
 ckpt_path: '/home/sort/ved/ViR/ckpt/'
 image_size: 32
 patch_size: 16
