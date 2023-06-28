@@ -1,7 +1,7 @@
 import math
 import torch
 import torch.nn as nn
-from torchvision.ops.misc import Conv2dNormActivation
+from torchvision.ops.misc import Conv2dNormActivation, MLP
 from collections import OrderedDict
 from typing import Callable
 from functools import partial
@@ -147,7 +147,7 @@ class RWKV_ChannelMix(nn.Module):
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
         self.time_mix_k = nn.Parameter(torch.empty(1, 1, config["n_embd"]))
         self.time_mix_r = nn.Parameter(torch.empty(1, 1, config["n_embd"]))
-        self.key = nn.Linear(config["n_embd"], config["dim_ffn"], bias=False)
+        self.key = nn.Linear(config["n_embd"], config["dim_ffn"], bias=False) # Randomness needs to be provided here only.
         self.receptance = nn.Linear(config["n_embd"], config["n_embd"], bias=False)
         self.value = nn.Linear(config["dim_ffn"], config["n_embd"], bias=False)
 
@@ -184,30 +184,156 @@ class Block(nn.Module):
         input = input + self.ffn(self.ln2(input))
         return input
 
-class Encoder(nn.Module):
-    """Model Encoder for sequence to sequence translation."""
+class MLPBlock(MLP):
+    """Transformer MLP block."""
+
+    _version = 2
+
+    def __init__(self, in_dim: int, mlp_dim: int, dropout: float):
+        super().__init__(in_dim, [mlp_dim, in_dim], activation_layer=nn.GELU, inplace=None, dropout=dropout)
+
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.normal_(m.bias, std=1e-6)
+
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        version = local_metadata.get("version", None)
+
+        if version is None or version < 2:
+            # Replacing legacy MLPBlock with MLP. See https://github.com/pytorch/vision/pull/6053
+            for i in range(2):
+                for type in ["weight", "bias"]:
+                    old_key = f"{prefix}linear_{i+1}.{type}"
+                    new_key = f"{prefix}{3*i}.{type}"
+                    if old_key in state_dict:
+                        state_dict[new_key] = state_dict.pop(old_key)
+
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
+
+class EncoderBlock(nn.Module):
+    """Transformer encoder block."""
 
     def __init__(
         self,
-        config: Dict[str, float],
+        num_heads: int,
+        hidden_dim: int,
+        mlp_dim: int,
+        dropout: float,
+        attention_dropout: float,
+        norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
+    ):
+        super().__init__()
+        self.num_heads = num_heads
+
+        # Attention block
+        self.ln_1 = norm_layer(hidden_dim)
+        self.self_attention = nn.MultiheadAttention(hidden_dim, num_heads, dropout=attention_dropout, batch_first=True)
+        self.dropout = nn.Dropout(dropout)
+
+        # MLP block
+        self.ln_2 = norm_layer(hidden_dim)
+        self.mlp = MLPBlock(hidden_dim, mlp_dim, dropout)
+
+    def forward(self, input: torch.Tensor):
+        torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
+        x = self.ln_1(input)
+        x, _ = self.self_attention(x, x, x, need_weights=False)
+        x = self.dropout(x)
+        x = x + input
+
+        y = self.ln_2(x)
+        y = self.mlp(y)
+        return x + y
+    
+class Encoder(nn.Module):
+    """Transformer Model Encoder for sequence to sequence translation."""
+
+    def __init__(
+        self,
+        seq_length: int,
+        num_layers: int,
+        num_heads: int,
+        hidden_dim: int,
+        mlp_dim: int,
+        dropout: float,
+        attention_dropout: float,
         norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
     ):
         super().__init__()
         # Note that batch_size is on the first dim because
         # we have batch_first=True in nn.MultiAttention() by default
-        self.pos_emb = nn.Parameter(torch.empty(((config["image_size"]//config["patch_size"])**2, config["n_embd"])).normal_(std=0.02))
-        self.ln0 = nn.LayerNorm(config["n_embd"])
-        self.dropout = nn.Dropout(config["dropout"])
+        self.pos_embedding = nn.Parameter(torch.empty(1, seq_length, hidden_dim).normal_(std=0.02))  # from BERT
+        self.dropout = nn.Dropout(dropout)
         layers: OrderedDict[str, nn.Module] = OrderedDict()
-        for i in range(config["n_layer"]):
-            layers[f"encoder_layer_{i}"] = Block(config, i)
+        for i in range(num_layers):
+            layers[f"encoder_layer_{i}"] = EncoderBlock(
+                num_heads,
+                hidden_dim,
+                mlp_dim,
+                dropout,
+                attention_dropout,
+                norm_layer,
+            )
         self.layers = nn.Sequential(layers)
-        self.ln = norm_layer(config["n_embd"])
+        self.ln = norm_layer(hidden_dim)
 
     def forward(self, input: torch.Tensor):
         torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
-        input = input[:, 1:] + self.pos_emb
-        return self.ln(self.layers(self.ln0(self.dropout(input))))
+        input = input + self.pos_embedding
+        return self.ln(self.layers(self.dropout(input)))
+
+# class Encoder(nn.Module):
+#     """Model Encoder for sequence to sequence translation."""
+
+#     def __init__(
+#         self,
+#         config: Dict[str, float],
+#         norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
+#     ):
+#         super().__init__()
+#         # Note that batch_size is on the first dim because
+#         # we have batch_first=True in nn.MultiAttention() by default
+#         self.pos_emb = nn.Parameter(torch.empty(((config["image_size"]//config["patch_size"])**2, config["n_embd"])).normal_(std=0.02))
+#         self.ln0 = nn.LayerNorm(config["n_embd"])
+#         self.dropout = nn.Dropout(config["dropout"])
+#         layers: OrderedDict[str, nn.Module] = OrderedDict()
+#         for i in range(config["n_layer"]):
+#             # layers[f"encoder_layer_{i}"] = Block(config, i)
+#             layers[f"encoder_layer_{i}"] = EncoderBlock(
+#                 (config["image_size"]//config["patch_size"])**2,
+#                 config["n_embd"],
+#                 config["dim_ffn"],
+#                 config["dropout"],
+#                 0.0,
+#                 norm_layer,
+#             )
+
+#         self.layers = nn.Sequential(layers)
+#         self.ln = norm_layer(config["n_embd"])
+
+#     def forward(self, input: torch.Tensor):
+#         torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
+#         input = input[:, 1:] + self.pos_emb
+#         return self.ln(self.layers(self.ln0(self.dropout(input))))
 
 class ConvStemConfig(NamedTuple):
     out_channels: int
@@ -261,7 +387,15 @@ class VisionRWKV(nn.Module):
         # Add a class token
         self.class_token = nn.Parameter(torch.zeros(1, 1, hidden_dim))
 
-        self.encoder = Encoder(config)
+        self.encoder = Encoder(
+            (config["image_size"]//config["patch_size"])**2,
+            config["n_layer"],
+            config["n_layer"],
+            config["n_embd"],
+            config["dim_ffn"],
+            config["dropout"],
+            0.0
+            )
 
         self.heads = nn.Linear(hidden_dim, num_classes)
 
