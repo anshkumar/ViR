@@ -7,6 +7,7 @@ patch_size: 16
 max_norm: 1
 num_classes: 10
 num_epochs: 400
+eval_epoch: 5
 batch_size: 2048
 learning_rate: 0.001
 n_embd: 768

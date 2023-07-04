@@ -156,21 +156,22 @@ def main(argv):
         for checkpoint in checkpoints_to_delete:
             os.remove(checkpoint)
 
-    # Test the model
-    model.eval()
-    with torch.no_grad():
-        correct = 0
-        total = 0
-        for images, labels in test_loader:
-            images = images.to(device)
-            labels = labels.to(device)
-            outputs = model(images, include_head=True)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+        if epoch % config["eval_epoch"] == 0:
+            # Test the model
+            model.eval()
+            with torch.no_grad():
+                correct = 0
+                total = 0
+                for images, labels in test_loader:
+                    images = images.to(device)
+                    labels = labels.to(device)
+                    outputs = model(images, include_head=True)
+                    _, predicted = torch.max(outputs.data, 1)
+                    total += labels.size(0)
+                    correct += (predicted == labels).sum().item()
 
-        accuracy = 100 * correct / total
-        print(f"Test Accuracy: {accuracy:.2f}%")
+                accuracy = 100 * correct / total
+                print(f"Test Accuracy: {accuracy:.2f}%")
         
 if __name__ == '__main__':
     app.run(main)
