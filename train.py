@@ -108,9 +108,9 @@ def main(argv):
     resume = config["resume"]
     checkpoints = glob.glob(os.path.join(config["ckpt_path"], "model_epoch_*.pt"))
     checkpoints.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))  # Sort by epoch number
-    checkpoints_to_resume = checkpoints[-1]
 
-    if resume:
+    if resume and len(checkpoints) > 0:
+        checkpoints_to_resume = checkpoints[-1]
         checkpoint = torch.load(os.path.join(config["ckpt_path"], checkpoints_to_resume))
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
