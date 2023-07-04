@@ -149,6 +149,7 @@ def main(argv):
         # Save the model after each epoch
         checkpoint_path = os.path.join(config["ckpt_path"], f"model_epoch_{epoch+1}.pt")
         torch.save(checkpoint, checkpoint_path)
+        print(F"Check point saved at : {checkpoint_path}")
 
         # Remove older checkpoints, keeping only top_k checkpoints
         checkpoints = glob.glob(os.path.join(config["ckpt_path"], "model_epoch_*.pt"))
