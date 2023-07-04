@@ -243,7 +243,7 @@ class Block(nn.Module):
         y = self.ln3(input)
         y = self.mlp(y)
 
-        return x + y
+        return input + y
 
 class Encoder(nn.Module):
     """Model Encoder for sequence to sequence translation."""

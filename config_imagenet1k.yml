@@ -1,5 +1,6 @@
 dataset: imagenet1k
-backbone: vir
+backbone: vit
+resume: 1
 ckpt_path: '/home/sort/ved/ViR/ckpt/'
 image_size: 224
 patch_size: 16

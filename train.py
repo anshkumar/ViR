@@ -103,6 +103,24 @@ def main(argv):
 
     # Training loop
     total_steps = len(train_loader)
+
+    # Check if a checkpoint exists for resuming training
+    resume = config["resume"]
+    checkpoints = glob.glob(os.path.join(config["ckpt_path"], "model_epoch_*.pt"))
+    checkpoints.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))  # Sort by epoch number
+    checkpoints_to_resume = checkpoints[-1]
+
+    if resume:
+        checkpoint = torch.load(os.path.join(config["ckpt_path"], checkpoints_to_resume))
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        epoch = checkpoint['epoch']
+        loss = checkpoint['loss']
+    else:
+        epoch = 0
+
+    checkpoint_path = os.path.join(config["ckpt_path"], f"model_epoch_{epoch+1}.pt")
+
     for epoch in range(config["num_epochs"]):
         for i, (images, labels) in enumerate(train_loader):
             images = images.to(device)
@@ -121,9 +139,15 @@ def main(argv):
             if (i+1) % config["print_step"] == 0:
                 print(f"Epoch [{epoch+1}/{config['num_epochs']}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}")
             scheduler.step()
+        # Save checkpoint after every epoch
+        checkpoint = {
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': loss
+        }
         # Save the model after each epoch
-        checkpoint_path = os.path.join(config["ckpt_path"], f"model_epoch_{epoch+1}.pt")
-        torch.save(model.state_dict(), checkpoint_path)
+        torch.save(checkpoint, checkpoint_path)
 
         # Remove older checkpoints, keeping only top_k checkpoints
         checkpoints = glob.glob(os.path.join(config["ckpt_path"], "model_epoch_*.pt"))
