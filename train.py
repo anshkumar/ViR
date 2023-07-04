@@ -111,15 +111,15 @@ def main(argv):
 
     if resume and len(checkpoints) > 0:
         checkpoints_to_resume = checkpoints[-1]
+        print(F"Resuming from {checkpoints_to_resume}")
         checkpoint = torch.load(os.path.join(config["ckpt_path"], checkpoints_to_resume))
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         epoch = checkpoint['epoch']
         loss = checkpoint['loss']
     else:
+        print("Training from scratch.")
         epoch = 0
-
-    checkpoint_path = os.path.join(config["ckpt_path"], f"model_epoch_{epoch+1}.pt")
 
     for epoch in range(config["num_epochs"]):
         for i, (images, labels) in enumerate(train_loader):
@@ -147,6 +147,7 @@ def main(argv):
             'loss': loss
         }
         # Save the model after each epoch
+        checkpoint_path = os.path.join(config["ckpt_path"], f"model_epoch_{epoch+1}.pt")
         torch.save(checkpoint, checkpoint_path)
 
         # Remove older checkpoints, keeping only top_k checkpoints
@@ -158,6 +159,7 @@ def main(argv):
 
         if epoch % config["eval_epoch"] == 0:
             # Test the model
+            print("Evaluating the model.")
             model.eval()
             with torch.no_grad():
                 correct = 0
