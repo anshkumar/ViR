@@ -62,7 +62,7 @@ def main(argv):
     ]
 
     cso = CSO()
-    cso.optimize(config, conv_stem_configs, 4, train_loader, -1, 1, 1000)
+    cso.optimize(config, conv_stem_configs, 10, train_loader, -1, 1, 1000)
         
 if __name__ == '__main__':
     app.run(main)
