@@ -18,7 +18,7 @@ class CSO(object):
         return list(self.__Gbest)
 
     def save_agent_states(self, file_path, agent_states):
-        torch.save(file_path, agent_states)
+        torch.save(agent_states, file_path)
 
     def load_agent_states(self, file_path, model):   
         checkpoint = torch.load(file_path) 
@@ -31,7 +31,7 @@ class CSO(object):
             param.data = torch.clamp(param.data, lb, ub)
         return model
 
-    def update_model_weights_hines(self, i, r1, r2, s1, s2, lb, ub):
+    def update_model_weights_hines(self, model, i, r1, r2, s1, s2, lb, ub):
         model = self.load_agent_states(F'agents_{i}.pth', model)
         model_1 = self.load_agent_states(F'pbest_{i}.pth', model)
         model_2 = self.load_agent_states(F'pbest_{r1}.pth', model)
@@ -45,7 +45,7 @@ class CSO(object):
             param.data = torch.clamp(param.data, lb, ub)
         return model
 
-    def update_model_weights_chicks(self, i1, i2, FL, lb, ub):
+    def update_model_weights_chicks(self, model, i1, i2, FL, lb, ub):
         model = self.load_agent_states(F'agents_{i1}.pth', model)
         model_1 = self.load_agent_states(F'pbest_{i1}.pth', model)
         model_2 = self.load_agent_states(F'pbest_{i2}.pth', model)
@@ -62,7 +62,7 @@ class CSO(object):
         loss = criterion(outputs, self.labels)
         return loss
 
-    def optimize(self, model, config, conv_stem_configs, n, train_dataset, lb, ub, iteration, G=5, FL=0.5):
+    def optimize(self, config, conv_stem_configs, n, train_dataset, lb, ub, iteration, G=5, FL=0.5):
         """
         :param n: number of agents
         :param function: test function
@@ -106,7 +106,7 @@ class CSO(object):
 
         batch = next(iter(train_dataset))
         self.images, self.labels = batch
-        fitness = [self.loss(model, "agents", x) for x in self.__agents]
+        fitness = [self.loss(model, "agents", x).detach().numpy() for x in self.__agents]
         pfit = fitness
 
         Pbest = self.__agents[np.array(fitness).argmin()]
@@ -117,7 +117,7 @@ class CSO(object):
             self.images, self.labels = batch
 
             if t % G == 0:
-                chickens = self.__update_relationship(n, self.loss, model, rn, hn,
+                chickens = self.__update_relationship(n, model, rn, hn,
                                                       cn, mn)
                 roosters, hines, chicks = chickens
 
@@ -148,11 +148,11 @@ class CSO(object):
                 except OverflowError:
                     s2 = float('inf')
 
-                model = self.update_model_weights_hines(i[0], r1, r2, s1, s2, lb, ub)
+                model = self.update_model_weights_hines(model, i[0], r1, r2, s1, s2, lb, ub)
                 self.save_agent_states(F'agents_{i[0]}.pth',model.state_dict())
 
             for i in chicks:
-                model = self.update_model_weights_chicks(i[0], i[1], FL, lb, ub)
+                model = self.update_model_weights_chicks(model, i[0], i[1], FL, lb, ub)
                 self.save_agent_states(F'agents_{i[0]}.pth',model.state_dict())
 
             fitness = []
@@ -164,7 +164,7 @@ class CSO(object):
                         param.data = torch.rand_like(param.data)
                         param.data = torch.clamp(param.data, lb, ub)
                     self.save_agent_states(F'agents_{x}.pth',model.state_dict())
-                fitness.append(fit)
+                fitness.append(fit.detach().numpy())
 
             for i in range(n):
                 if fitness[i] < pfit[i]:
