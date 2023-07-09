@@ -88,7 +88,7 @@ class CSO(object):
                             config["patch_size"], 
                             config["n_embd"], 
                             config["num_classes"],
-                            conv_stem_configs).to("cuda")
+                            conv_stem_configs)
             self.save_agent_states(F'agents_{i}.pth',model.state_dict())
             self.__agents.append(i)
 
@@ -100,16 +100,16 @@ class CSO(object):
                             config["patch_size"], 
                             config["n_embd"], 
                             config["num_classes"],
-                            conv_stem_configs).to("cuda")
+                            conv_stem_configs)
             self.save_agent_states(F'pbest_{i}.pth',model.state_dict())
             pbest.append(i)
 
         batch = next(iter(train_dataset))
         self.images, self.labels = batch
-        self.images = self.images.to("cuda")
-        self.labels = self.labels.to("cuda")
+        self.images = self.images
+        self.labels = self.labels
 
-        fitness = [self.loss(model, "agents", x).cpu().detach().numpy() for x in self.__agents]
+        fitness = [self.loss(model, "agents", x).detach().numpy() for x in self.__agents]
         pfit = fitness
 
         Pbest = self.__agents[np.array(fitness).argmin()]
@@ -118,8 +118,8 @@ class CSO(object):
         for t in range(iteration):
             batch = next(iter(train_dataset))
             self.images, self.labels = batch
-            self.images = self.images.to("cuda")
-            self.labels = self.labels.to("cuda")
+            self.images = self.images
+            self.labels = self.labels
 
             if t % G == 0:
                 chickens = self.__update_relationship(n, model, rn, hn,
@@ -169,7 +169,7 @@ class CSO(object):
                         param.data = torch.rand_like(param.data)
                         param.data = torch.clamp(param.data, lb, ub)
                     self.save_agent_states(F'agents_{x}.pth',model.state_dict())
-                fitness.append(fit.cpu().detach().numpy())
+                fitness.append(fit.detach().numpy())
 
             for i in range(n):
                 if fitness[i] < pfit[i]:
