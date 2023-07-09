@@ -88,7 +88,7 @@ class CSO(object):
                             config["patch_size"], 
                             config["n_embd"], 
                             config["num_classes"],
-                            conv_stem_configs)
+                            conv_stem_configs).to("cuda")
             self.save_agent_states(F'agents_{i}.pth',model.state_dict())
             self.__agents.append(i)
 
@@ -100,7 +100,7 @@ class CSO(object):
                             config["patch_size"], 
                             config["n_embd"], 
                             config["num_classes"],
-                            conv_stem_configs)
+                            conv_stem_configs).to("cuda")
             self.save_agent_states(F'pbest_{i}.pth',model.state_dict())
             pbest.append(i)
 
