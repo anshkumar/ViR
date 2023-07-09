@@ -109,7 +109,7 @@ class CSO(object):
         self.images = self.images.to("cuda")
         self.labels = self.labels.to("cuda")
 
-        fitness = [self.loss(model, "agents", x).detach().numpy() for x in self.__agents]
+        fitness = [self.loss(model, "agents", x).cpu().detach().numpy() for x in self.__agents]
         pfit = fitness
 
         Pbest = self.__agents[np.array(fitness).argmin()]
@@ -169,7 +169,7 @@ class CSO(object):
                         param.data = torch.rand_like(param.data)
                         param.data = torch.clamp(param.data, lb, ub)
                     self.save_agent_states(F'agents_{x}.pth',model.state_dict())
-                fitness.append(fit.detach().numpy())
+                fitness.append(fit.cpu().detach().numpy())
 
             for i in range(n):
                 if fitness[i] < pfit[i]:
