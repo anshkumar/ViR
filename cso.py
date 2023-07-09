@@ -106,6 +106,9 @@ class CSO(object):
 
         batch = next(iter(train_dataset))
         self.images, self.labels = batch
+        self.images = self.images.to("cuda")
+        self.labels = self.labels.to("cuda")
+
         fitness = [self.loss(model, "agents", x).detach().numpy() for x in self.__agents]
         pfit = fitness
 
@@ -115,6 +118,8 @@ class CSO(object):
         for t in range(iteration):
             batch = next(iter(train_dataset))
             self.images, self.labels = batch
+            self.images = self.images.to("cuda")
+            self.labels = self.labels.to("cuda")
 
             if t % G == 0:
                 chickens = self.__update_relationship(n, model, rn, hn,
