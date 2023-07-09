@@ -1,13 +1,9 @@
-from ViR import VisionRWKV, ConvStemConfig
-from ViT import VisionTransformer
+from ViT import VisionTransformer, ConvStemConfig
 from absl import app
 from absl import flags
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-import torch.optim.lr_scheduler as lr_scheduler
 import yaml
 import os
 import glob
@@ -61,45 +57,14 @@ def main(argv):
         ConvStemConfig(out_channels=384, kernel_size=1, stride=1),
     ]
 
-    if config["backbone"].lower() == 'vir':
-        model = VisionRWKV(
+    model = VisionTransformer(
             config, 
             config["image_size"], 
             config["patch_size"], 
             config["n_embd"], 
             config["num_classes"],
             conv_stem_configs).to(device)
-    else:
-        model = VisionTransformer(
-            config, 
-            config["image_size"], 
-            config["patch_size"], 
-            config["n_embd"], 
-            config["num_classes"],
-            conv_stem_configs).to(device)
-    model = torch.jit.script(model)
-
-    # Define loss function and optimizer
-    criterion = nn.CrossEntropyLoss()
-
-    parameters_with_decay = []
-    parameters_without_decay = []
-
-    for name, parameter in model.named_parameters():
-        if 'weight' in name:
-            parameters_with_decay.append(parameter)
-        else:
-            parameters_without_decay.append(parameter)
-
-    optimizer = optim.AdamW(
-        [{'params': parameters_with_decay, 'weight_decay': float(config["weight_decay"])},
-        {'params': parameters_without_decay, 'weight_decay': 0.0}], 
-        lr=float(config["learning_rate"]), 
-        betas=(float(config["beta_1"]), float(config["beta_2"])), 
-        eps=float(config["adam_eps"]), 
-        amsgrad=False,
-        fused=True)
-    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["num_epochs"])
+    # model = torch.jit.script(model)
 
     # Training loop
     total_steps = len(train_loader)
@@ -114,7 +79,6 @@ def main(argv):
         print(F"Resuming from {checkpoints_to_resume}")
         checkpoint = torch.load(os.path.join(config["ckpt_path"], checkpoints_to_resume))
         model.load_state_dict(checkpoint['model_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         epoch = checkpoint['epoch']
         loss = checkpoint['loss']
     else:
@@ -127,23 +91,17 @@ def main(argv):
             labels = labels.to(device)
 
             # Forward pass
-            outputs = model(images, include_head=True)
-            loss = criterion(outputs, labels)
-
-            # Backward and optimize
-            optimizer.zero_grad()
-            loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), config["max_norm"])
-            optimizer.step()
+            loss = model.zo_step(images, labels)
+            model.zo_update()
 
             if (i+1) % config["print_step"] == 0:
-                print(f"Epoch [{epoch+1}/{config['num_epochs']}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}")
+                print(f"Epoch [{epoch+1}/{config['num_epochs']}], Step [{i+1}/{total_steps}], Loss: {loss:.4f}")
             scheduler.step()
+
         # Save checkpoint after every epoch
         checkpoint = {
             'epoch': epoch + 1,
             'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
             'loss': loss
         }
         # Save the model after each epoch

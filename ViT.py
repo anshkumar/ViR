@@ -1,5 +1,6 @@
 import math
 import torch
+import numpy as np
 import torch.nn as nn
 from torchvision.ops.misc import Conv2dNormActivation, MLP
 from collections import OrderedDict
@@ -148,6 +149,9 @@ class VisionTransformer(nn.Module):
         self.image_size = image_size
         self.patch_size = patch_size
         self.hidden_dim = hidden_dim
+        self.zo_random_seed = np.random.randint(1000000000)
+        self.criterion = nn.CrossEntropyLoss()
+        self.config = config
 
         if conv_stem_configs is not None:
             # As per https://arxiv.org/abs/2106.14881
@@ -206,6 +210,75 @@ class VisionTransformer(nn.Module):
 
         nn.init.zeros_(self.heads.weight)
         nn.init.zeros_(self.heads.bias)
+
+    def zo_perturb_parameters(self, random_seed=None, scaling_factor=1):
+        """
+        Perturb the parameters with random vector z.
+        Input: 
+        - random_seed: random seed for MeZO in-place perturbation (if it's None, we will use self.zo_random_seed)
+        - scaling_factor: theta = theta + scaling_factor * z * eps
+        """
+
+        # Set the random seed to ensure that we sample the same z for perturbation/update
+        torch.manual_seed(random_seed if random_seed is not None else self.zo_random_seed)
+        
+        for name, param in self.named_parameters_to_optim:
+            z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
+            param.data = param.data + scaling_factor * z * self.config["zo_eps"]
+
+    def zo_forward(self, inputs, labels, include_head=True):
+        """
+        Get (no gradient) loss from the model. Dropout is turned off too.
+        """
+        self.eval()
+
+        with torch.inference_mode():
+            outputs = self(inputs, include_head=include_head)
+            loss = self.criterion(outputs, labels)
+        return loss.detach()
+    
+    def zo_step(self, inputs, labels):
+        """
+        Estimate gradient by MeZO. Return the loss from f(theta + z)
+        """
+        # What parameters to optimize 
+        self.named_parameters_to_optim = []
+        for name, param in self.named_parameters():
+            if param.requires_grad:
+                self.named_parameters_to_optim.append((name, param))
+
+        # First function evaluation
+        self.zo_perturb_parameters(scaling_factor=1)
+        loss1 = self.zo_forward(inputs, labels)
+
+        # Second function evaluation
+        self.zo_perturb_parameters(scaling_factor=-2)
+        loss2 = self.zo_forward(inputs, labels)
+
+        self.projected_grad = ((loss1 - loss2) / (2 * self.config["zo_eps"])).item()
+
+        # Reset model back to its parameters at start of step
+        self.zo_perturb_parameters(scaling_factor=1)
+        
+        return loss1
+    
+    def zo_update(self):
+        """
+        Update the parameters with the estimated gradients.
+        """
+
+        # Reset the random seed for sampling zs
+        torch.manual_seed(self.zo_random_seed)     
+
+        for name, param in self.named_parameters_to_optim:
+            # Resample z
+            z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
+            if "bias" not in name and "layer_norm" not in name and "layernorm" not in name:
+                param.data = param.data - self._get_learning_rate() * (self.projected_grad * z + self.config["weight_decay"] * param.data)
+            else:
+                param.data = param.data - self._get_learning_rate() * (self.projected_grad * z)
+
+        self.lr_scheduler.step()
 
     def _process_input(self, x: torch.Tensor) -> torch.Tensor:
         n, c, h, w = x.shape
