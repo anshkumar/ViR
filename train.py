@@ -91,12 +91,11 @@ def main(argv):
             labels = labels.to(device)
 
             # Forward pass
+            # loss = model.zo_step_layer(images, labels)
             loss = model.zo_step(images, labels)
-            model.zo_update()
 
             if (i+1) % config["print_step"] == 0:
                 print(f"Epoch [{epoch+1}/{config['num_epochs']}], Step [{i+1}/{total_steps}], Loss: {loss:.4f}")
-            scheduler.step()
 
         # Save checkpoint after every epoch
         checkpoint = {

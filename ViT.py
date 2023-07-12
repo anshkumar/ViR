@@ -106,7 +106,7 @@ class Encoder(nn.Module):
         super().__init__()
         # Note that batch_size is on the first dim because
         # we have batch_first=True in nn.MultiAttention() by default
-        self.pos_embedding = nn.Parameter(torch.empty(1, seq_length, hidden_dim).normal_(std=0.02))  # from BERT
+        self.pos_embedding = torch.empty(1, seq_length+1, hidden_dim)  # from BERT
         self.dropout = nn.Dropout(dropout)
         layers: OrderedDict[str, nn.Module] = OrderedDict()
         for i in range(num_layers):
@@ -121,10 +121,20 @@ class Encoder(nn.Module):
         self.layers = nn.Sequential(layers)
         self.ln = norm_layer(hidden_dim)
 
+        # Init 
+        n = 10000
+        for k in range(seq_length+1):
+            for i in np.arange(int(hidden_dim/2)):
+                denominator = np.power(n, 2*i/hidden_dim)
+                self.pos_embedding[0, k, 2*i] = np.sin(k/denominator)
+                self.pos_embedding[0, k, 2*i+1] = np.cos(k/denominator)
+        # self.pos_embedding = nn.Parameter(self.pos_embedding)
+
+
     def forward(self, input: torch.Tensor):
         torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
-        # input = input + self.pos_embedding
-        input = input[:, 1:] + self.pos_embedding
+        input = input + self.pos_embedding
+        # input = input[:, 1:] + self.pos_embedding
         return self.ln(self.layers(self.dropout(input)))
 
 class ConvStemConfig(NamedTuple):
@@ -194,6 +204,12 @@ class VisionTransformer(nn.Module):
 
         self.heads = nn.Linear(hidden_dim, num_classes)
 
+        # What parameters to optimize 
+        self.named_parameters_to_optim = []
+        for name, param in self.named_parameters():
+            if param.requires_grad:
+                self.named_parameters_to_optim.append((name, param))
+
         # Init
         if isinstance(self.conv_proj, nn.Conv2d):
             fan_in = self.conv_proj.in_channels * self.conv_proj.kernel_size[0] * self.conv_proj.kernel_size[1]
@@ -224,28 +240,58 @@ class VisionTransformer(nn.Module):
         
         for name, param in self.named_parameters_to_optim:
             z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
-            param.data = param.data + scaling_factor * z * self.config["zo_eps"]
+            param.data = param.data + scaling_factor * z * float(self.config["zo_eps"])
 
     def zo_forward(self, inputs, labels, include_head=True):
         """
         Get (no gradient) loss from the model. Dropout is turned off too.
         """
-        self.eval()
-
-        with torch.inference_mode():
-            outputs = self(inputs, include_head=include_head)
-            loss = self.criterion(outputs, labels)
+        outputs = self(inputs, include_head=include_head)
+        loss = self.criterion(outputs, labels)
         return loss.detach()
+    
+    def zo_step_layer(self, inputs, labels):
+        """
+        Estimate gradient by MeZO. Return the loss from f(theta + z)
+        """
+        # Set the random seed to ensure that we sample the same z for perturbation/update
+        torch.manual_seed(self.zo_random_seed)
+
+        losses = []
+        for name, param in self.named_parameters_to_optim:
+            # First function evaluation
+            scaling_factor=1
+            z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
+            param.data = param.data + scaling_factor * z * float(self.config["zo_eps"])            
+            loss1 = self.zo_forward(inputs, labels)
+
+            # Second function evaluation
+            scaling_factor=-2
+            z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
+            param.data = param.data + scaling_factor * z * float(self.config["zo_eps"])
+            loss2 = self.zo_forward(inputs, labels)
+
+            self.projected_grad = ((loss1 - loss2) / (2 * float(self.config["zo_eps"]))).item()
+
+            # Reset model back to its parameters at start of step
+            scaling_factor=1
+            z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
+            param.data = param.data + scaling_factor * z * float(self.config["zo_eps"])
+
+            # Resample z
+            z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
+            if "bias" not in name and "layer_norm" not in name and "layernorm" not in name:
+                param.data = param.data - self.config["learning_rate"] * (self.projected_grad * z + self.config["weight_decay"] * param.data)
+            else:
+                param.data = param.data - self.config["learning_rate"] * (self.projected_grad * z)
+            print(loss1)
+            losses.append(loss1)
+        return np.mean(losses)
     
     def zo_step(self, inputs, labels):
         """
         Estimate gradient by MeZO. Return the loss from f(theta + z)
         """
-        # What parameters to optimize 
-        self.named_parameters_to_optim = []
-        for name, param in self.named_parameters():
-            if param.requires_grad:
-                self.named_parameters_to_optim.append((name, param))
 
         # First function evaluation
         self.zo_perturb_parameters(scaling_factor=1)
@@ -255,11 +301,11 @@ class VisionTransformer(nn.Module):
         self.zo_perturb_parameters(scaling_factor=-2)
         loss2 = self.zo_forward(inputs, labels)
 
-        self.projected_grad = ((loss1 - loss2) / (2 * self.config["zo_eps"])).item()
-
+        self.projected_grad = ((loss1 - loss2) / (2 * float(self.config["zo_eps"]))).item()
         # Reset model back to its parameters at start of step
         self.zo_perturb_parameters(scaling_factor=1)
         
+        self.zo_update()
         return loss1
     
     def zo_update(self):
@@ -274,11 +320,11 @@ class VisionTransformer(nn.Module):
             # Resample z
             z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
             if "bias" not in name and "layer_norm" not in name and "layernorm" not in name:
-                param.data = param.data - self._get_learning_rate() * (self.projected_grad * z + self.config["weight_decay"] * param.data)
+                param.data = param.data - self.config["learning_rate"] * (self.projected_grad * z + self.config["weight_decay"] * param.data)
             else:
-                param.data = param.data - self._get_learning_rate() * (self.projected_grad * z)
+                param.data = param.data - self.config["learning_rate"] * (self.projected_grad * z)
 
-        self.lr_scheduler.step()
+        # self.lr_scheduler.step()
 
     def _process_input(self, x: torch.Tensor) -> torch.Tensor:
         n, c, h, w = x.shape
