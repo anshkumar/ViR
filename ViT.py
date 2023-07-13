@@ -106,7 +106,7 @@ class Encoder(nn.Module):
         super().__init__()
         # Note that batch_size is on the first dim because
         # we have batch_first=True in nn.MultiAttention() by default
-        self.pos_embedding = torch.empty(1, seq_length+1, hidden_dim)  # from BERT
+        self.pos_embedding = torch.empty(1, seq_length, hidden_dim).to(self.device)  # from BERT
         self.dropout = nn.Dropout(dropout)
         layers: OrderedDict[str, nn.Module] = OrderedDict()
         for i in range(num_layers):
@@ -123,18 +123,17 @@ class Encoder(nn.Module):
 
         # Init 
         n = 10000
-        for k in range(seq_length+1):
+        for k in range(seq_length):
             for i in np.arange(int(hidden_dim/2)):
                 denominator = np.power(n, 2*i/hidden_dim)
                 self.pos_embedding[0, k, 2*i] = np.sin(k/denominator)
                 self.pos_embedding[0, k, 2*i+1] = np.cos(k/denominator)
         # self.pos_embedding = nn.Parameter(self.pos_embedding)
 
-
     def forward(self, input: torch.Tensor):
         torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
-        input = input + self.pos_embedding
-        # input = input[:, 1:] + self.pos_embedding
+        # input = input + self.pos_embedding
+        input = input[:, 1:] + self.pos_embedding
         return self.ln(self.layers(self.dropout(input)))
 
 class ConvStemConfig(NamedTuple):
@@ -242,7 +241,7 @@ class VisionTransformer(nn.Module):
             z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
             param.data = param.data + scaling_factor * z * float(self.config["zo_eps"])
 
-    def zo_forward(self, inputs, labels, include_head=True):
+    def loss(self, inputs, labels, include_head=True):
         """
         Get (no gradient) loss from the model. Dropout is turned off too.
         """
@@ -263,13 +262,13 @@ class VisionTransformer(nn.Module):
             scaling_factor=1
             z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
             param.data = param.data + scaling_factor * z * float(self.config["zo_eps"])            
-            loss1 = self.zo_forward(inputs, labels)
+            loss1 = self.loss(inputs, labels)
 
             # Second function evaluation
             scaling_factor=-2
             z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
             param.data = param.data + scaling_factor * z * float(self.config["zo_eps"])
-            loss2 = self.zo_forward(inputs, labels)
+            loss2 = self.loss(inputs, labels)
 
             self.projected_grad = ((loss1 - loss2) / (2 * float(self.config["zo_eps"]))).item()
 
@@ -284,8 +283,10 @@ class VisionTransformer(nn.Module):
                 param.data = param.data - self.config["learning_rate"] * (self.projected_grad * z + self.config["weight_decay"] * param.data)
             else:
                 param.data = param.data - self.config["learning_rate"] * (self.projected_grad * z)
-            print(loss1)
-            losses.append(loss1)
+            if self.device == "cuda":
+                losses.append(loss1.cpu())
+            else:
+                losses.append(loss1)
         return np.mean(losses)
     
     def zo_step(self, inputs, labels):
@@ -295,11 +296,11 @@ class VisionTransformer(nn.Module):
 
         # First function evaluation
         self.zo_perturb_parameters(scaling_factor=1)
-        loss1 = self.zo_forward(inputs, labels)
+        loss1 = self.loss(inputs, labels)
 
         # Second function evaluation
         self.zo_perturb_parameters(scaling_factor=-2)
-        loss2 = self.zo_forward(inputs, labels)
+        loss2 = self.loss(inputs, labels)
 
         self.projected_grad = ((loss1 - loss2) / (2 * float(self.config["zo_eps"]))).item()
         # Reset model back to its parameters at start of step

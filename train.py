@@ -3,7 +3,10 @@ from absl import app
 from absl import flags
 import torch
 import torchvision
+import torch.nn as nn
 import torchvision.transforms as transforms
+import torch.optim as optim
+import torch.optim.lr_scheduler as lr_scheduler
 import yaml
 import os
 import glob
@@ -66,6 +69,26 @@ def main(argv):
             conv_stem_configs).to(device)
     # model = torch.jit.script(model)
 
+    if config['opt'] not in ["mezo_layer", "mezo"]:
+        parameters_with_decay = []
+        parameters_without_decay = []
+
+        for name, parameter in model.named_parameters():
+            if 'weight' in name:
+                parameters_with_decay.append(parameter)
+            else:
+                parameters_without_decay.append(parameter)
+
+        optimizer = optim.AdamW(
+            [{'params': parameters_with_decay, 'weight_decay': float(config["weight_decay"])},
+            {'params': parameters_without_decay, 'weight_decay': 0.0}], 
+            lr=float(config["learning_rate"]), 
+            betas=(float(config["beta_1"]), float(config["beta_2"])), 
+            eps=float(config["adam_eps"]), 
+            amsgrad=False,
+            fused=True)
+        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["num_epochs"])
+
     # Training loop
     total_steps = len(train_loader)
 
@@ -91,8 +114,18 @@ def main(argv):
             labels = labels.to(device)
 
             # Forward pass
-            # loss = model.zo_step_layer(images, labels)
-            loss = model.zo_step(images, labels)
+            if config['opt'] == "mezo_layer":
+                loss = model.zo_step_layer(images, labels)
+            elif config['opt'] == "mezo":
+                loss = model.zo_step(images, labels)
+            else:
+                loss = model.loss(images, labels)
+                 # Backward and optimize
+                optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), config["max_norm"])
+                optimizer.step()
+                scheduler.step()
 
             if (i+1) % config["print_step"] == 0:
                 print(f"Epoch [{epoch+1}/{config['num_epochs']}], Step [{i+1}/{total_steps}], Loss: {loss:.4f}")
