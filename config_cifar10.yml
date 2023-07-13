@@ -22,4 +22,4 @@ opt: 'adam'
 weight_decay: 0.01
 zo_eps: 0.001
 dropout: 0.0
-print_step: 25
+print_step: 24

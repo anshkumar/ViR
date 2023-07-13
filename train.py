@@ -48,8 +48,8 @@ def main(argv):
     elif config["dataset"] == 'imagenet1k':
         train_dataset = torchvision.datasets.ImageNet(root='./data_imagenet1k', split='train', transform=transform)
         test_dataset = torchvision.datasets.ImageNet(root='./data_imagenet1k', split='val', transform=transform)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config["batch_size"], shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True, drop_last=True)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config["batch_size"], shuffle=False, drop_last=True)
 
     # Initialize the model
     conv_stem_configs = [

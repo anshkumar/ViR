@@ -55,7 +55,7 @@ class DConvNormActivation(nn.Module):
         self.out_width = (in_width + 2 * self.padding - kernel_width) // stride + 1
         offset_channels = 2 * offset_groups * kernel_height * kernel_width
         self.offset = torch.randn(batch_size, offset_channels, self.out_height, self.out_width).to(device)
-        self.mask = torch.randn(batch_size, offset_groups * kernel_height * kernel_width, self.out_height, self.out_width).to(device)
+        # self.mask = torch.randn(batch_size, offset_groups * kernel_height * kernel_width, self.out_height, self.out_width).to(device)
         self.weight=torch.randn(out_channels, in_channels // groups, kernel_height, kernel_width).to(device)
         self.bias=torch.randn(out_channels).to(device)
 
@@ -71,7 +71,7 @@ class DConvNormActivation(nn.Module):
             stride=self.stride,
             padding=self.padding,
             dilation=self.dilation,
-            mask=self.mask
+            # mask=self.mask
         )
         if self.norm_layer is not None:
             output = self.norm_layer(output)
