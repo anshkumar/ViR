@@ -276,9 +276,22 @@ class VisionTransformer(nn.Module):
                     )
                 prev_channels = conv_stem_layer_config.out_channels
                 
-            seq_proj.add_module(
-                "conv_last", nn.Conv2d(in_channels=prev_channels, out_channels=hidden_dim, kernel_size=1)
-            )
+            if not int(config['dconv']):
+                seq_proj.add_module(
+                    "conv_last", nn.Conv2d(in_channels=prev_channels, out_channels=hidden_dim, kernel_size=1)
+                )
+            else:
+                seq_proj.add_module(
+                    "conv_last", DConvNormActivation(
+                            config["batch_size"],
+                            prev_height,
+                            prev_width,
+                            prev_channels,
+                            hidden_dim,
+                            1,
+                            device=device
+                        )
+                )
             self.conv_proj: nn.Module = seq_proj
         else:
             self.conv_proj = nn.Conv2d(
