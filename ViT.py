@@ -258,9 +258,7 @@ class VisionTransformer(nn.Module):
                         ),
                     )
                 else:
-                    seq_proj.add_module(
-                        f"dconv_bn_relu_{i}",
-                        DConvNormActivation(
+                    dconv = DConvNormActivation(
                             config["batch_size"],
                             prev_height,
                             prev_width,
@@ -269,11 +267,15 @@ class VisionTransformer(nn.Module):
                             conv_stem_layer_config.kernel_size,
                             conv_stem_layer_config.stride,
                             device=device
-                        ),
+                        )
+                    prev_height = dconv.out_height
+                    prev_width = dconv.out_width
+                    seq_proj.add_module(
+                        f"dconv_bn_relu_{i}",
+                        dconv,
                     )
                 prev_channels = conv_stem_layer_config.out_channels
-                prev_height = conv_stem_layer_config.out_height
-                prev_width = conv_stem_layer_config.out_width
+                
             seq_proj.add_module(
                 "conv_last", nn.Conv2d(in_channels=prev_channels, out_channels=hidden_dim, kernel_size=1)
             )
