@@ -102,11 +102,12 @@ class Encoder(nn.Module):
         dropout: float,
         attention_dropout: float,
         norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
+        device: torch.device = torch.device("cuda")
     ):
         super().__init__()
         # Note that batch_size is on the first dim because
         # we have batch_first=True in nn.MultiAttention() by default
-        self.pos_embedding = torch.empty(1, seq_length, hidden_dim).to(self.device)  # from BERT
+        self.pos_embedding = torch.empty(1, seq_length, hidden_dim).to(device)  # from BERT
         self.dropout = nn.Dropout(dropout)
         layers: OrderedDict[str, nn.Module] = OrderedDict()
         for i in range(num_layers):
@@ -152,6 +153,7 @@ class VisionTransformer(nn.Module):
         hidden_dim: int,
         num_classes: int,
         conv_stem_configs: Optional[List[ConvStemConfig]] = None,
+        device: torch.device = torch.device("cuda")
     ):
         super().__init__()
         torch._assert(image_size % patch_size == 0, "Input shape indivisible by patch size!")
@@ -161,6 +163,7 @@ class VisionTransformer(nn.Module):
         self.zo_random_seed = np.random.randint(1000000000)
         self.criterion = nn.CrossEntropyLoss()
         self.config = config
+        self.device = device
 
         if conv_stem_configs is not None:
             # As per https://arxiv.org/abs/2106.14881
@@ -198,7 +201,8 @@ class VisionTransformer(nn.Module):
             config["n_embd"],
             config["dim_ffn"],
             config["dropout"],
-            0.0
+            0.0,
+            device
             )
 
         self.heads = nn.Linear(hidden_dim, num_classes)
@@ -283,7 +287,7 @@ class VisionTransformer(nn.Module):
                 param.data = param.data - self.config["learning_rate"] * (self.projected_grad * z + self.config["weight_decay"] * param.data)
             else:
                 param.data = param.data - self.config["learning_rate"] * (self.projected_grad * z)
-            if self.device == "cuda":
+            if self.device == torch.device("cuda"):
                 losses.append(loss1.cpu())
             else:
                 losses.append(loss1)

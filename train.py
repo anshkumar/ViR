@@ -66,7 +66,8 @@ def main(argv):
             config["patch_size"], 
             config["n_embd"], 
             config["num_classes"],
-            conv_stem_configs).to(device)
+            conv_stem_configs,
+            device).to(device)
     # model = torch.jit.script(model)
 
     if config['opt'] not in ["mezo_layer", "mezo"]:
