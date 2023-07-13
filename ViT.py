@@ -251,7 +251,7 @@ class VisionTransformer(nn.Module):
         """
         outputs = self(inputs, include_head=include_head)
         loss = self.criterion(outputs, labels)
-        return loss.detach()
+        return loss
     
     def zo_step_layer(self, inputs, labels):
         """
