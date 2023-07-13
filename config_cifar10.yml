@@ -8,6 +8,7 @@ num_classes: 10
 num_epochs: 400
 eval_epoch: 5
 batch_size: 2048
+dconv: 1
 learning_rate: 0.001
 n_embd: 768
 dim_att: 768 # dim_att = n_embd

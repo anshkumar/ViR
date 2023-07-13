@@ -3,10 +3,83 @@ import torch
 import numpy as np
 import torch.nn as nn
 from torchvision.ops.misc import Conv2dNormActivation, MLP
+from torchvision.ops import deform_conv2d
+from torchvision.utils import _make_ntuple, _log_api_usage_once
 from collections import OrderedDict
 from typing import Callable
 from functools import partial
-from typing import Callable, Dict, List, NamedTuple, Optional
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union, Sequence
+
+class DConvNormActivation(nn.Module):
+    def __init__(
+        self,
+        batch_size: int,
+        in_height: int,
+        in_width: int,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: Union[int, Tuple[int, ...]] = 3,
+        stride: Union[int, Tuple[int, ...]] = 1,
+        padding: Optional[Union[int, Tuple[int, ...], str]] = None,
+        groups: int = 1,
+        norm_layer: Optional[Callable[..., torch.nn.Module]] = torch.nn.BatchNorm2d,
+        activation_layer: Optional[Callable[..., torch.nn.Module]] = torch.nn.ReLU,
+        dilation: Union[int, Tuple[int, ...]] = 1,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.stride = stride
+        self.dilation = dilation
+        self.kernel_size = kernel_size
+        self.padding = padding
+        if padding is None:
+            if isinstance(kernel_size, int) and isinstance(dilation, int):
+                self.padding = (kernel_size - 1) // 2 * dilation
+            else:
+                _conv_dim = len(kernel_size) if isinstance(kernel_size, Sequence) else len(dilation)
+                self.kernel_size = _make_ntuple(kernel_size, _conv_dim)
+                self.dilation = _make_ntuple(dilation, _conv_dim)
+                self.padding = tuple((kernel_size[i] - 1) // 2 * dilation[i] for i in range(_conv_dim))
+
+        self.norm_layer = norm_layer(out_channels)
+        self.activation_layer = activation_layer()
+        
+        # Add deformable convolution layer
+        offset_groups = 1  # Adjust according to your requirement
+        kernel_height = self.kernel_size if isinstance(self.kernel_size, int) else self.kernel_size[0]
+        kernel_width = self.kernel_size if isinstance(self.kernel_size, int) else self.kernel_size[1]
+        self.out_height = (in_height + 2 * self.padding - kernel_height) // stride + 1
+        self.out_width = (in_width + 2 * self.padding - kernel_width) // stride + 1
+        offset_channels = 2 * offset_groups * kernel_height * kernel_width
+        self.offset = torch.randn(batch_size, offset_channels, self.out_height, self.out_width).to(device)
+        self.mask = torch.randn(batch_size, offset_groups * kernel_height * kernel_width, self.out_height, self.out_width).to(device)
+        self.weight=torch.randn(out_channels, in_channels // groups, kernel_height, kernel_width).to(device)
+        self.bias=torch.randn(out_channels).to(device)
+
+        _log_api_usage_once(self)
+        self.out_channels = out_channels
+    
+    def forward(self, input: torch.Tensor):
+        output = deform_conv2d(
+            input,
+            offset=self.offset,
+            weight=self.weight,
+            bias=self.bias,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            mask=self.mask
+        )
+        if self.norm_layer is not None:
+            output = self.norm_layer(output)
+        
+        if self.activation_layer is not None:
+            output = self.activation_layer(output)
+
+        return output
 
 class MLPBlock(MLP):
     """Transformer MLP block."""
@@ -169,18 +242,35 @@ class VisionTransformer(nn.Module):
             # As per https://arxiv.org/abs/2106.14881
             seq_proj = nn.Sequential()
             prev_channels = 3
+            prev_height = self.image_size
+            prev_width = self.image_size
             for i, conv_stem_layer_config in enumerate(conv_stem_configs):
-                seq_proj.add_module(
-                    f"conv_bn_relu_{i}",
-                    Conv2dNormActivation(
-                        in_channels=prev_channels,
-                        out_channels=conv_stem_layer_config.out_channels,
-                        kernel_size=conv_stem_layer_config.kernel_size,
-                        stride=conv_stem_layer_config.stride,
-                        norm_layer=conv_stem_layer_config.norm_layer,
-                        activation_layer=conv_stem_layer_config.activation_layer,
-                    ),
-                )
+                if not int(config['dconv']):
+                    seq_proj.add_module(
+                        f"conv_bn_relu_{i}",
+                        Conv2dNormActivation(
+                            in_channels=prev_channels,
+                            out_channels=conv_stem_layer_config.out_channels,
+                            kernel_size=conv_stem_layer_config.kernel_size,
+                            stride=conv_stem_layer_config.stride,
+                            norm_layer=conv_stem_layer_config.norm_layer,
+                            activation_layer=conv_stem_layer_config.activation_layer,
+                        ),
+                    )
+                else:
+                    seq_proj.add_module(
+                        f"dconv_bn_relu_{i}",
+                        DConvNormActivation(
+                            config["batch_size"],
+                            prev_height,
+                            prev_width,
+                            prev_channels,
+                            conv_stem_layer_config.out_channels,
+                            conv_stem_layer_config.kernel_size,
+                            conv_stem_layer_config.stride,
+                            device=device
+                        ),
+                    )
                 prev_channels = conv_stem_layer_config.out_channels
             seq_proj.add_module(
                 "conv_last", nn.Conv2d(in_channels=prev_channels, out_channels=hidden_dim, kernel_size=1)
