@@ -101,8 +101,8 @@ class Encoder(nn.Module):
         mlp_dim: int,
         dropout: float,
         attention_dropout: float,
+        device: Optional[torch.device] = None,
         norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
-        device: Optional[torch.device] = None
     ):
         super().__init__()
         # Note that batch_size is on the first dim because
