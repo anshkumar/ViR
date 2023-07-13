@@ -7,7 +7,7 @@ max_norm: 1
 num_classes: 1000
 num_epochs: 400
 eval_epoch: 5
-batch_size: 128
+batch_size: 224
 dconv: 1
 learning_rate: 0.0001
 n_embd: 768

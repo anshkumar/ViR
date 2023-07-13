@@ -272,6 +272,8 @@ class VisionTransformer(nn.Module):
                         ),
                     )
                 prev_channels = conv_stem_layer_config.out_channels
+                prev_height = conv_stem_layer_config.out_height
+                prev_width = conv_stem_layer_config.out_width
             seq_proj.add_module(
                 "conv_last", nn.Conv2d(in_channels=prev_channels, out_channels=hidden_dim, kernel_size=1)
             )
