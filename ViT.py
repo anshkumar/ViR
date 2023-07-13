@@ -102,7 +102,7 @@ class Encoder(nn.Module):
         dropout: float,
         attention_dropout: float,
         norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
-        device: torch.device = torch.device("cuda")
+        device: Optional[torch.device] = None
     ):
         super().__init__()
         # Note that batch_size is on the first dim because
@@ -153,7 +153,7 @@ class VisionTransformer(nn.Module):
         hidden_dim: int,
         num_classes: int,
         conv_stem_configs: Optional[List[ConvStemConfig]] = None,
-        device: torch.device = torch.device("cuda")
+        device: Optional[torch.device] = None
     ):
         super().__init__()
         torch._assert(image_size % patch_size == 0, "Input shape indivisible by patch size!")
