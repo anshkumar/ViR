@@ -109,7 +109,7 @@ def main(argv):
         print("Training from scratch.")
         epoch = 0
 
-    for epoch in range(config["num_epochs"]):
+    for epoch in range(epoch, config["num_epochs"]):
         for i, (images, labels) in enumerate(train_loader):
             images = images.to(device)
             labels = labels.to(device)
@@ -121,7 +121,7 @@ def main(argv):
                 loss = model.zo_step(images, labels)
             else:
                 loss = model.loss(images, labels)
-                 # Backward and optimize
+                # Backward and optimize
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), config["max_norm"])
